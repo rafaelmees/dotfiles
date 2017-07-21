@@ -17,6 +17,7 @@ Plugin 'mhinz/vim-signify'
 Plugin 'terryma/vim-multiple-cursors'
 Plugin 'kien/ctrlp.vim'
 Plugin 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
+Plugin 'christoomey/vim-tmux-navigator'
 call vundle#end()
 
 " Colors
@@ -59,12 +60,6 @@ map <C-w> :close <Enter>
 map <C-f> /
 map <C-p> <Esc>:find
 map <F3> n
-
-" Ctrl + HJKL movement
-nmap <C-k> :wincmd k<CR>
-nmap <C-j> :wincmd j<CR>
-nmap <C-h> :wincmd h<CR>
-nmap <C-l> :wincmd l<CR>
 
 " Tab control
 nnoremap <C-t> :sp<CR>
