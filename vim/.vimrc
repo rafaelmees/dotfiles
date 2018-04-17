@@ -47,7 +47,7 @@ set ignorecase
 set incsearch
 set nohlsearch
 set wildmenu
-set wildignore+=*/tmp/*,*.so,*.swp,*.zip,*/.git/*,*/.hg/*,*/vendor/*,*/bower_components/*,*/node_modules/*,*/build-servidor-central/*,*/build-servidor-local-detran/*,*/build-servidor-local/*,*/proxies/*
+set wildignore+=*/tmp/*,*.so,*.swp,*.zip,*/.git/*,*/.hg/*,*/vendor/*,*/bower_components/*,*/node_modules/*,*/proxies/*
 let mapleader=","
 
 " Shortcuts
