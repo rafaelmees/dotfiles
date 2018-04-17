@@ -10,7 +10,11 @@ function install() {
 	$SUDO dnf install -y \
 		vim \
 		tmux \
+		git \
 	--best
+	
+	curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
+    		https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
 	curl -fsSL get.docker.com -o get-docker.sh
 	sh get-docker.sh
@@ -36,7 +40,7 @@ function install() {
 	cp tmux/.tmux.conf ~/.tmux/.tmux.conf
 
 	#create signature file
-	echo $'Thanks,\n\tRafael' >~/.signature
+	echo $'Created by \n\tRafael Mees' >~/.signature
 }
 
 install
