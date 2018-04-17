@@ -1,24 +1,22 @@
 filetype indent on
 filetype plugin on
 
-set rtp+=~/.vim/bundle/Vundle.vim
-
-call vundle#begin()
-Plugin 'VundleVim/Vundle.vim'
-Plugin 'scrooloose/nerdtree'
-Plugin 'mattn/emmet-vim'
-Plugin 'raimondi/delimitmate'
-Plugin 'bronson/vim-trailing-whitespace'
-Plugin 'honza/vim-snippets'
-Plugin 'sirver/ultisnips'
-Plugin 'ervandew/supertab'
-Plugin 'scrooloose/nerdcommenter'
-Plugin 'mhinz/vim-signify'
-Plugin 'terryma/vim-multiple-cursors'
-Plugin 'kien/ctrlp.vim'
-Plugin 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
-Plugin 'christoomey/vim-tmux-navigator'
-call vundle#end()
+call plug#begin('~/.vim/plugged')
+Plug 'scrooloose/nerdtree'
+Plug 'scrooloose/nerdcommenter'
+Plug 'mattn/emmet-vim'
+Plug 'raimondi/delimitmate'
+Plug 'bronson/vim-trailing-whitespace'
+Plug 'honza/vim-snippets'
+Plug 'sirver/ultisnips'
+Plug 'ervandew/supertab'
+Plug 'mhinz/vim-signify'
+Plug 'terryma/vim-multiple-cursors'
+Plug 'kien/ctrlp.vim'
+Plug 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
+Plug 'christoomey/vim-tmux-navigator'
+Plug 'nightsense/vimspectr'
+call plug#end()
 
 " Colors
 syntax on
@@ -49,7 +47,7 @@ set ignorecase
 set incsearch
 set nohlsearch
 set wildmenu
-set wildignore+=*/tmp/*,*.so,*.swp,*.zip,*/.git/*,*/.hg/*,*/vendor/*,*/bower_components/*,*/node_modules/*
+set wildignore+=*/tmp/*,*.so,*.swp,*.zip,*/.git/*,*/.hg/*,*/vendor/*,*/bower_components/*,*/node_modules/*,*/build-servidor-central/*,*/build-servidor-local-detran/*,*/build-servidor-local/*,*/proxies/*
 let mapleader=","
 
 " Shortcuts
@@ -72,9 +70,14 @@ let g:multi_cursor_prev_key='<C-n>'
 let g:multi_cursor_skip_key='<C-x>'
 let g:multi_cursor_quit_key='<Esc>'
 
+" NerdTree
+let NERDTreeShowHidden=1
+
+" CTRL P
+let g:ctrlp_show_hidden=1
+
 " Emmet
 let g:user_emmet_leader_key=','
 
 " Powerline
 set laststatus=2
-
