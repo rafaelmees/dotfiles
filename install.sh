@@ -36,6 +36,8 @@ function install() {
 
 	mkdir -p ~/.config/powerline/themes/tmux
 	cp tmux/default.json ~/.config/powerline/themes/tmux/default.json
+	mkdir -p ~/.config/powerline/themes/shell
+	cp bash/default.json ~/.config/powerline/themes/shell/default.json
 	mkdir -p ~/.tmux
 	cp tmux/.tmux.conf ~/.tmux/.tmux.conf
 
