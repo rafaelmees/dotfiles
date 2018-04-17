@@ -1,0 +1,18 @@
+{
+    "segments": {
+        "left": [
+            {
+                "function": "powerline.segments.common.env.user",
+                "args": {
+                    "hide_domain": false
+                }
+            },
+            {
+                "function": "powerline.segments.common.env.cwd",
+                "args" : {
+                    "use_path_separator": true
+                }
+            }
+        ]
+    }
+}
