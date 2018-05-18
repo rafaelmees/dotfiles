@@ -115,10 +115,6 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
-[ -r /home/rafael/.byobu/prompt ] && . /home/rafael/.byobu/prompt   #byobu-prompt#
+[ -r $HOME/.byobu/prompt ] && . $HOME/.byobu/prompt   #byobu-prompt#
 
-. /home/rafael/.local/lib/python2.7/site-packages/powerline/bindings/bash/powerline.sh
-
-if [[ ! $TERM =~ screen ]]; then
-    exec tmux
-fi
+. $HOME/.local/lib/python2.7/site-packages/powerline/bindings/bash/powerline.sh

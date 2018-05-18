@@ -10,7 +10,11 @@ function install() {
 	$SUDO dnf install -y \
 		vim \
 		tmux \
+		git \
 	--best
+	
+	curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
+    		https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
 	curl -fsSL get.docker.com -o get-docker.sh
 	sh get-docker.sh
@@ -32,11 +36,13 @@ function install() {
 
 	mkdir -p ~/.config/powerline/themes/tmux
 	cp tmux/default.json ~/.config/powerline/themes/tmux/default.json
+	mkdir -p ~/.config/powerline/themes/shell
+	cp bash/default.json ~/.config/powerline/themes/shell/default.json
 	mkdir -p ~/.tmux
 	cp tmux/.tmux.conf ~/.tmux/.tmux.conf
 
 	#create signature file
-	echo $'Thanks,\n\tRafael' >~/.signature
+	echo $'Created by \n\tRafael Mees' >~/.signature
 }
 
 install
