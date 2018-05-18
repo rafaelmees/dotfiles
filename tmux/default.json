@@ -2,6 +2,12 @@
     "segments": {
         "right": [
             {
+                "function": "powerline.segments.common.vcs.branch",
+                "args": {
+                    "status_colors": true
+                }
+            },
+            {
                 "function": "powerline.segments.common.time.date",
                 "args": {
                     "format": "%d-%m-%Y %H:%M",
@@ -21,4 +27,3 @@
         ]
     }
 }
-
