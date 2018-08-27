@@ -8,7 +8,7 @@ function install() {
     fi
 
     $SUDO apt-get install -y \
-        vim \
+        gvim \
         tmux \
     --best
 
@@ -22,7 +22,7 @@ function install() {
     curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 
-    gsettings set org.gnome.desktop.wm.preferences button-layout 'close,maximize,minimize:'
+    gsettings set org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
 
     pip install --user powerline-status
 
@@ -42,7 +42,7 @@ function install() {
     mkdir -p ~/.config/powerline/themes/shell
     cp bash/default.json ~/.config/powerline/themes/shell/default.json
     mkdir -p ~/.tmux
-    cp tmux/.tmux.conf ~/.tmux/.tmux.conf
+    cp tmux/.tmux.conf ~/.tmux.conf
 
     #create signature file
     echo $'Created by \n\tRafael Mees' > ~/.signature

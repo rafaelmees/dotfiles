@@ -16,6 +16,7 @@ Plug 'kien/ctrlp.vim'
 Plug 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'nightsense/vimspectr'
+Plug 'nathanaelkane/vim-indent-guides'
 call plug#end()
 
 " Colors
@@ -62,6 +63,11 @@ map <F3> n
 " Tab control
 nnoremap <C-t> :sp<CR>
 inoremap <C-t> <Esc>:sp<CR>
+
+" Indent Guides
+let g:indent_guides_enable_on_vim_startup=1
+let g:indent_guides_guide_size=1
+let g:indent_guides_auto_colors = 0
 
 " Multi cursor
 let g:multi_cursor_use_default_mapping=0
