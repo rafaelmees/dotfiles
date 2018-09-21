@@ -1,4 +1,3 @@
-filetype indent on
 filetype plugin on
 
 call plug#begin('~/.vim/plugged')
@@ -17,6 +16,7 @@ Plug 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'nightsense/vimspectr'
 Plug 'nathanaelkane/vim-indent-guides'
+Plug 'editorconfig/editorconfig-vim'
 call plug#end()
 
 " Colors
@@ -52,7 +52,6 @@ set wildignore+=*/tmp/*,*.so,*.swp,*.zip,*/.git/*,*/.hg/*,*/vendor/*,*/bower_com
 let mapleader=","
 
 " Shortcuts
-map <C-e> :NERDTreeToggle<CR>
 map <C-a> GVgg
 map <C-z> u
 map <C-w> :close <Enter>
@@ -62,7 +61,6 @@ map <F3> n
 
 " Tab control
 nnoremap <C-t> :sp<CR>
-inoremap <C-t> <Esc>:sp<CR>
 
 " Indent Guides
 let g:indent_guides_enable_on_vim_startup=1
@@ -78,6 +76,11 @@ let g:multi_cursor_quit_key='<Esc>'
 
 " NerdTree
 let NERDTreeShowHidden=1
+map <C-e> :NERDTreeToggle<CR>
+
+" NerdCommenter
+let g:NERDSpaceDelims = 1
+noremap <C-_> :call NERDComment(0,"toggle")<CR>
 
 " CTRL P
 let g:ctrlp_show_hidden=1
