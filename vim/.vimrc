@@ -57,10 +57,12 @@ map <C-z> u
 map <C-w> :close <Enter>
 map <C-f> /
 map <C-p> <Esc>:find
-map <F3> n
 
 " Tab control
 nnoremap <C-t> :sp<CR>
+nnoremap <C-n> :tabnew<CR>
+" <C-tab>
+nnoremap <C-I> :tabnext<CR>
 
 " Indent Guides
 let g:indent_guides_enable_on_vim_startup=1
@@ -80,6 +82,7 @@ map <C-e> :NERDTreeToggle<CR>
 
 " NerdCommenter
 let g:NERDSpaceDelims = 1
+" <C-/>
 noremap <C-_> :call NERDComment(0,"toggle")<CR>
 
 " CTRL P
