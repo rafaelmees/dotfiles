@@ -26,7 +26,6 @@ colorscheme monokai
 " Misc
 set nu
 set swapfile
-set dir=~/.tmp
 set ttyfast
 set backspace=indent,eol,start
 set clipboard=unnamedplus

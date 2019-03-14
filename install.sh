@@ -7,7 +7,7 @@ function install() {
         SUDO=""
     fi
 
-    $SUDO apt-get install -y \
+    $SUDO dnf install -y \
         gvim \
         tmux \
     --best
@@ -17,10 +17,10 @@ function install() {
 
     curl -fsSL get.docker.com -o get-docker.sh
     sh get-docker.sh
-    $SUDO rm get-docker.sh
+    rm get-docker.sh
 
-    curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
+    $SUDO curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+    $SUDO chmod +x /usr/local/bin/docker-compose
 
     gsettings set org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
 
@@ -33,6 +33,7 @@ function install() {
     $SUDO fc-cache -vf ~/.fonts/
 
     cp vim/.vimrc ~/.vimrc
+    mkdir -p ~/.vim/colors && cp vim/colors/monokai.vim ~/.vim/colors/monokai.vim
 
     cp bash/.bashrc ~/.bashrc_user
     echo ". ~/.bashrc_user" >> ~/.bashrc
@@ -43,9 +44,6 @@ function install() {
     cp bash/default.json ~/.config/powerline/themes/shell/default.json
     mkdir -p ~/.tmux
     cp tmux/.tmux.conf ~/.tmux.conf
-
-    #create signature file
-    echo $'Created by \n\tRafael Mees' > ~/.signature
 }
 
 install
