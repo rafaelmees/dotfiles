@@ -17,6 +17,7 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'nightsense/vimspectr'
 Plug 'nathanaelkane/vim-indent-guides'
 Plug 'editorconfig/editorconfig-vim'
+Plug 'maxmellon/vim-jsx-pretty'
 call plug#end()
 
 " Colors
@@ -92,3 +93,6 @@ let g:user_emmet_leader_key=','
 
 " Powerline
 set laststatus=2
+
+" Vim-jsx
+let g:jsx_ext_required = 0
