@@ -10,6 +10,7 @@ function install() {
     $SUDO dnf install -y \
         gvim \
         tmux \
+        python-pip
     --best
 
     curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
