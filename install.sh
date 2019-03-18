@@ -23,6 +23,7 @@ function install() {
     $SUDO curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
     $SUDO chmod +x /usr/local/bin/docker-compose
     $SUDO systemctl enable docker
+    $SUDO usermod -aG docker $USER
 
     gsettings set org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
 
