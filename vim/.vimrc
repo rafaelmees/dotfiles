@@ -98,3 +98,16 @@ set laststatus=2
 " Vim-jsx
 let g:jsx_ext_required = 0
 
+function Convert4SpacesTo2 ()
+    :set ts=4 sts=4 noet
+    :retab!
+    :set ts=2 sts=2 et
+    :retab
+endfunction
+
+function Convert2SpacesTo4 ()
+    :set ts=2 sts=2 noet
+    :retab!
+    :set ts=4 sts=4 et
+    :retab
+endfunction
