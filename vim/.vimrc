@@ -10,7 +10,7 @@ Plug 'honza/vim-snippets'
 Plug 'sirver/ultisnips'
 Plug 'ervandew/supertab'
 Plug 'mhinz/vim-signify'
-Plug 'terryma/vim-multiple-cursors'
+" Plug 'terryma/vim-multiple-cursors'
 Plug 'kien/ctrlp.vim'
 Plug 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
 Plug 'christoomey/vim-tmux-navigator'
@@ -18,6 +18,7 @@ Plug 'nightsense/vimspectr'
 Plug 'nathanaelkane/vim-indent-guides'
 Plug 'editorconfig/editorconfig-vim'
 Plug 'maxmellon/vim-jsx-pretty'
+Plug 'dart-lang/dart-vim-plugin'
 call plug#end()
 
 " Colors
@@ -54,10 +55,11 @@ let mapleader=","
 
 " Shortcuts
 map <C-a> GVgg
-map <C-z> u
-map <C-w> :close <Enter>
-map <C-f> /
+map <C-w> :q <Enter>
 map <C-p> <Esc>:find
+
+" Replace word
+nmap <C-d> cgn
 
 " Tab control
 nnoremap <C-t> :sp<CR>
@@ -70,12 +72,12 @@ let g:indent_guides_enable_on_vim_startup=1
 let g:indent_guides_guide_size=1
 let g:indent_guides_auto_colors = 0
 
-" Multi cursor
-let g:multi_cursor_use_default_mapping=0
-let g:multi_cursor_next_key='<C-d>'
-let g:multi_cursor_prev_key='<C-n>'
-let g:multi_cursor_skip_key='<C-x>'
-let g:multi_cursor_quit_key='<Esc>'
+" " Multi cursor
+" let g:multi_cursor_use_default_mapping=-2
+" let g:multi_cursor_next_key='<C-d>'
+" let g:multi_cursor_prev_key='<C-n>'
+" let g:multi_cursor_skip_key='<C-x>'
+" let g:multi_cursor_quit_key='<Esc>'
 
 " NerdTree
 let NERDTreeShowHidden=1

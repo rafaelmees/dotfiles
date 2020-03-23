@@ -8,4 +8,4 @@ fi
 alias ll='ls -alF'
 alias vim='gvim -v'
 
-. $HOME/.local/lib/python2.7/site-packages/powerline/bindings/bash/powerline.sh
+. $HOME/.local/lib/python3.7/site-packages/powerline/bindings/bash/powerline.sh
