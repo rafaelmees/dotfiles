@@ -1,52 +1,46 @@
 #!/bin/bash
 
 function install() {
-    SUDO=$(which sudo 2>/dev/null)
-    # don't execute where it doesn't have (running from a container)
-    if [ -z $SUDO ] ; then
-        SUDO=""
-    fi
+  SUDO=$(which sudo 2>/dev/null)
+  # don't execute where it doesn't have (running from a container)
+  if [ -z $SUDO ] ; then
+    SUDO=""
+  fi
 
-    $SUDO dnf install -y \
-        gvim \
-        tmux \
-        python-pip
-    --best
+  # ssh-key
+  ssh-keygen -t rsa -f ~/.ssh/id_rsa_bitbucket_rafaelmees -N ""
+  ssh-keygen -t rsa -f ~/.ssh/id_rsa_github_rafaelmees -N ""
+  ssh-keygen -t rsa -f ~/.ssh/id_rsa_gitlab_rafaelmees -N ""
 
-    curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
-        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  # brew
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-    curl -fsSL get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    rm get-docker.sh
+  # tmux
+  brew install coreutils curl git htop neovim tmux
+  mkdir -p ~/.tmux
+  cp tmux/.tmux.conf ~/.tmux.conf
 
-    $SUDO curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-    $SUDO chmod +x /usr/local/bin/docker-compose
-    $SUDO systemctl enable docker
-    $SUDO usermod -aG docker $USER
+  # powerlevel10k
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ~/.powerlevel10k
 
-    gsettings set org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
+  # vscode powerline
+  git clone --depth=1 https://github.com/pcwalton/vscode-powerline.git ~/.vscode_powerline
 
-    pip install --user powerline-status
+  # rust
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-    wget https://github.com/powerline/powerline/raw/develop/font/PowerlineSymbols.otf
-    wget https://github.com/powerline/powerline/raw/develop/font/10-powerline-symbols.conf
-    mkdir -p ~/.fonts/ && mv PowerlineSymbols.otf ~/.fonts/
-    mkdir -p ~/.config/fontconfig/conf.d/ && mv 10-powerline-symbols.conf ~/.config/fontconfig/conf.d/
-    $SUDO fc-cache -vf ~/.fonts/
+  # vim
+  curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  cp vim/.vimrc ~/.vimrc
 
-    cp vim/.vimrc ~/.vimrc
-    mkdir -p ~/.vim/colors && cp vim/colors/monokai.vim ~/.vim/colors/monokai.vim
+  # zsh
+  cp zsh/.zshrc ~/.zshrc_user
+  echo ". ~/.zshrc_user" >> ~/.zshrc
+  source ~/.zshrc
 
-    cp bash/.bashrc ~/.bashrc_user
-    echo ". ~/.bashrc_user" >> ~/.bashrc
-
-    mkdir -p ~/.config/powerline/themes/tmux
-    cp tmux/default.json ~/.config/powerline/themes/tmux/default.json
-    mkdir -p ~/.config/powerline/themes/shell
-    cp bash/default.json ~/.config/powerline/themes/shell/default.json
-    mkdir -p ~/.tmux
-    cp tmux/.tmux.conf ~/.tmux.conf
+  # asdf
+  git clone --depth=1 https://github.com/asdf-vm/asdf.git ~/.asdf
+  asdf plugin-add flutter
 }
 
 install

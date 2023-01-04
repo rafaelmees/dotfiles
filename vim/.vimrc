@@ -1,29 +1,29 @@
 filetype plugin on
 
 call plug#begin('~/.vim/plugged')
+Plug 'vim-airline/vim-airline'
 Plug 'scrooloose/nerdtree'
 Plug 'scrooloose/nerdcommenter'
 Plug 'mattn/emmet-vim'
 Plug 'raimondi/delimitmate'
 Plug 'bronson/vim-trailing-whitespace'
 Plug 'honza/vim-snippets'
-Plug 'sirver/ultisnips'
 Plug 'ervandew/supertab'
 Plug 'mhinz/vim-signify'
-" Plug 'terryma/vim-multiple-cursors'
 Plug 'kien/ctrlp.vim'
-Plug 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'nightsense/vimspectr'
 Plug 'nathanaelkane/vim-indent-guides'
 Plug 'editorconfig/editorconfig-vim'
 Plug 'maxmellon/vim-jsx-pretty'
 Plug 'dart-lang/dart-vim-plugin'
+Plug 'arcticicestudio/nord-vim'
 call plug#end()
 
 " Colors
 syntax on
-colorscheme monokai
+colorscheme nord
+let g:airline_powerline_fonts=1
 
 " Misc
 set nu
@@ -93,9 +93,6 @@ let g:ctrlp_show_hidden=1
 
 " Emmet
 let g:user_emmet_leader_key=','
-
-" Powerline
-set laststatus=2
 
 " Vim-jsx
 let g:jsx_ext_required = 0
