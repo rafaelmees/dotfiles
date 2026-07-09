@@ -1,0 +1,9 @@
+# Global mise configuration.
+#
+# Enables reading of the "idiomatic version files" (.nvmrc, .node-version) for
+# node. Without this, mise ignores projects' .nvmrc by default.
+[settings]
+idiomatic_version_file_enable_tools = ["node"]
+
+[tools]
+node = "lts"

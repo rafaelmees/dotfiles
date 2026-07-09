@@ -1,0 +1,71 @@
+add_newline = false
+
+format = """
+$directory\
+${custom.dircap}\
+$git_branch\
+$git_status\
+$character\
+"""
+
+right_format = """
+[](fg:237)\
+$cmd_duration\
+$status\
+$time\
+"""
+
+[directory]
+style = "bg:237 fg:255"
+format = "[ $path]($style)"
+truncate_to_repo = false
+truncation_length = 6
+truncation_symbol = "…/"
+read_only = " "
+read_only_style = "bg:237 fg:250"
+
+[custom.dircap]
+when = "! git rev-parse --is-inside-work-tree 2>/dev/null"
+command = "true"
+format = "[](fg:237)"
+
+[git_branch]
+symbol = " "
+style = "bg:250 fg:239"
+format = "[](fg:237 bg:250)[ $symbol$branch]($style)"
+
+[git_status]
+style = "bg:250 fg:239"
+format = "[ $all_status$ahead_behind]($style)[](fg:250)"
+conflicted = "!"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕"
+untracked = "?"
+stashed = "≡"
+modified = "±"
+staged = "+"
+renamed = "»"
+deleted = "✘"
+
+[cmd_duration]
+min_time = 500
+show_milliseconds = false
+style = "bg:237 fg:245"
+format = "[ $duration]($style)"
+
+[status]
+disabled = false
+style = "bg:237 fg:210"
+format = "[ ✘ $status]($style)"
+
+[time]
+disabled = false
+time_format = "%H:%M:%S"
+style = "bg:237 fg:250"
+format = "[ $time ]($style)"
+
+[character]
+success_symbol = "[](250)"
+error_symbol = "[](250)"
+vimcmd_symbol = "[](250)"

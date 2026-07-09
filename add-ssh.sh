@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Generates SSH keys interactively (ed25519) and prints each public key so you
+# can register it on the remote (GitHub, Bitbucket, ...).
+#
+# Loops asking for a key name; leave it blank to finish. Existing keys are never
+# overwritten, but their public key is still printed.
+#
+# Run standalone:  ./add-ssh.sh
+# Via installer:   ./install.sh --add-ssh
+#
+set -euo pipefail
+
+info()  { printf "\033[1;37m==>\033[0m %s\n" "$1"; }
+ok()    { printf "\033[1;32m  ✓\033[0m %s\n" "$1"; }
+warn()  { printf "\033[1;33m  !\033[0m %s\n" "$1"; }
+
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
+info "Generate SSH keys (ed25519), e.g., bitbucket_personal, bitbucket_work, github_personal."
+info "Leave the name blank and press Enter to finish."
+
+key=""
+while true; do
+  printf "\033[1;37m==>\033[0m Key name (blank to finish): "
+  read -r key || break
+  [ -z "$key" ] && break
+
+  keyfile="$HOME/.ssh/$key"
+  if [ -f "$keyfile" ]; then
+    warn "key $key already exists — not overwriting"
+  else
+    ssh-keygen -t ed25519 -f "$keyfile" -N ""
+    ok "key $key created"
+  fi
+
+  info "Public key ($key.pub) — add it to the remote:"
+  cat "$keyfile.pub"
+  printf "\n"
+done
+
+ok "done"

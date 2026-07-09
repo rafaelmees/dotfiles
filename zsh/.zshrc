@@ -1,30 +1,22 @@
-# powerlevel10k
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-source ~/powerlevel10k/powerlevel10k.zsh-theme
+ssh-add --apple-use-keychain ~/.ssh/bitbucket_pessoal >/dev/null 2>&1
+ssh-add --apple-use-keychain ~/.ssh/bitbucket_amaiseducacao >/dev/null 2>&1
 
-# tmux
-# tmux source-file ~/.tmux.conf
-# if command -v tmux &> /dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
-#   exec tmux
-# fi
-
-# vim
+# Aliases
+alias ll='ls -alhF'
 alias vim='nvim'
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+alias grep='grep --color=auto'
 
-# ssh keys
-ssh-add /Users/rafaelmees/.ssh/id_rsa_bitbucket_rafaelmees 2> /dev/null
-ssh-add /Users/rafaelmees/.ssh/id_rsa_github_rafaelmees 2> /dev/null
-ssh-add /Users/rafaelmees/.ssh/id_rsa_gitlab_rafaelmees 2> /dev/null
+export PATH="$HOME/.local/bin:$PATH"
 
-# paths
-export PATH="$PATH":"$HOME/.pub-cache/bin"
-export PATH="$PATH":"$HOME/.local/bin":
+# mise - version manager (node, etc.)
+# Enables automatic per-directory version switching and reads .nvmrc/.tool-versions/mise.toml.
+eval "$(mise activate zsh)"
 
-# asdf
-. $(brew --prefix asdf)/libexec/asdf.sh
+eval "$(starship init zsh)"
 
-# flutter
-export FLUTTER_ROOT="$(asdf where flutter)"
+if command -v tmux >/dev/null && [ -z "$TMUX" ]; then
+  tmux attach-session -t main || tmux new-session -s main
+fi
