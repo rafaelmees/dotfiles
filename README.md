@@ -35,6 +35,10 @@ Flags:
 brew always runs (already-installed packages are skipped, not re-installed);
 pass `--upgrade` when you also want to update them.
 
+**Platforms:** works on **macOS** and **Linux** (server/WSL) — CLI tools come from
+Homebrew on both. On Linux the GUI bits (ghostty, Nerd Font) are skipped; for the
+tmux clipboard, install `xclip` or `wl-clipboard` via your distro.
+
 `install.sh` is **idempotent** and **backs up** any existing file to
 `~/.dotfiles-backup/<timestamp>/` before replacing it. Since it uses symlinks,
 editing a file here in the repo is immediately reflected on the system.
@@ -92,6 +96,7 @@ Commands: `:Convert4SpacesTo2` and `:Convert2SpacesTo4` to reindent.
 - Pane navigation integrated with vim (`C-h/j/k/l`)
 - "Noir" theme (gray), truecolor enabled
 - Auto-attach to the `main` session (via `.zshrc`)
+- Clipboard yank (`y`) uses `pbcopy` on macOS, `wl-copy`/`xclip` on Linux
 
 ### Ghostty
 JetBrains Mono, dark background (`#181818`) with slight transparency.

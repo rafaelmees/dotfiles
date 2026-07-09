@@ -1,5 +1,20 @@
-ssh-add --apple-use-keychain ~/.ssh/bitbucket_pessoal >/dev/null 2>&1
-ssh-add --apple-use-keychain ~/.ssh/bitbucket_amaiseducacao >/dev/null 2>&1
+# Homebrew on PATH (macOS: /opt/homebrew or /usr/local; Linux: linuxbrew).
+if ! command -v brew >/dev/null 2>&1; then
+  for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew \
+               /home/linuxbrew/.linuxbrew/bin/brew "$HOME/.linuxbrew/bin/brew"; do
+    [ -x "$_brew" ] && eval "$("$_brew" shellenv)" && break
+  done
+  unset _brew
+fi
+
+# Load every SSH key into the agent (use the macOS keychain when available).
+_ssh_add_opts=()
+[ "$(uname -s)" = "Darwin" ] && _ssh_add_opts=(--apple-use-keychain)
+for _pub in ~/.ssh/*.pub(N); do
+  _key="${_pub%.pub}"
+  [ -f "$_key" ] && ssh-add "${_ssh_add_opts[@]}" "$_key" >/dev/null 2>&1
+done
+unset _pub _key _ssh_add_opts
 
 # Aliases
 alias ll='ls -alhF'

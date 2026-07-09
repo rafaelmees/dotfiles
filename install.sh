@@ -4,6 +4,7 @@
 # - Idempotent: run it as many times as you like.
 # - Backs up any existing file before replacing it.
 # - brew always runs (already-installed packages are skipped, not re-installed).
+# - Cross-platform: macOS (formulae + casks) and Linux (formulae only, CLI setup).
 #
 # Usage:
 #   ./install.sh            # install deps (brew) + create the symlinks
@@ -15,7 +16,12 @@ set -euo pipefail
 DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)"
 
+IS_MACOS=false
+[ "$(uname -s)" = "Darwin" ] && IS_MACOS=true
+
+# CLI tools — installed via Homebrew on both macOS and Linux.
 BREW_FORMULAE=(tmux neovim starship tree-sitter-cli mise)
+# GUI apps / fonts — macOS only (Homebrew casks don't exist on Linux).
 BREW_CASKS=(ghostty font-jetbrains-mono-nerd-font macmediakeyforwarder)
 
 info()  { printf "\033[1;37m==>\033[0m %s\n" "$1"; }
@@ -46,22 +52,50 @@ link() {
   ok "$dest -> $src"
 }
 
+# Makes sure the `brew` command is available in this script's PATH.
+ensure_brew() {
+  if command -v brew >/dev/null 2>&1; then
+    return
+  fi
+
+  info "Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # A fresh install isn't on PATH yet — locate it (path differs on macOS/Linux).
+  local candidate
+  for candidate in \
+    /opt/homebrew/bin/brew \
+    /usr/local/bin/brew \
+    /home/linuxbrew/.linuxbrew/bin/brew \
+    "$HOME/.linuxbrew/bin/brew"; do
+    if [ -x "$candidate" ]; then
+      eval "$("$candidate" shellenv)"
+      return
+    fi
+  done
+
+  warn "brew was installed but isn't on PATH — open a new shell and re-run."
+  exit 1
+}
+
 install_brew_deps() {
   local do_upgrade="$1"
 
-  if ! command -v brew >/dev/null 2>&1; then
-    info "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  fi
+  ensure_brew
 
   info "Installing dependencies (brew)..."
   brew install "${BREW_FORMULAE[@]}"
-  brew install --cask "${BREW_CASKS[@]}"
+  [ "$IS_MACOS" = true ] && brew install --cask "${BREW_CASKS[@]}"
 
   if [ "$do_upgrade" = true ]; then
     info "Upgrading packages (brew upgrade)..."
     brew upgrade "${BREW_FORMULAE[@]}"
-    brew upgrade --cask "${BREW_CASKS[@]}"
+    [ "$IS_MACOS" = true ] && brew upgrade --cask "${BREW_CASKS[@]}"
+  fi
+
+  if [ "$IS_MACOS" = false ]; then
+    warn "Linux: skipped ghostty and the Nerd Font (GUI-only)."
+    warn "Linux: for tmux clipboard, install xclip or wl-clipboard via your distro."
   fi
 
   ok "dependencies installed"
@@ -94,7 +128,11 @@ main() {
 
   info "Done!"
   [ -d "$BACKUP_DIR" ] && warn "Old files saved in: $BACKUP_DIR"
-  info "Restart the shell (exec zsh) and Ghostty to apply everything."
+  if [ "$IS_MACOS" = true ]; then
+    info "Restart the shell (exec zsh) and Ghostty to apply everything."
+  else
+    info "Restart the shell (exec zsh) to apply everything."
+  fi
 }
 
 main "$@"
