@@ -6,8 +6,8 @@
 # Loops asking for a key name; leave it blank to finish. Existing keys are never
 # overwritten, but their public key is still printed.
 #
-# Run standalone:  ./add-ssh.sh
-# Via installer:   ./install.sh --add-ssh
+# Run standalone:  ./add-ssh
+# Via installer:   ./install --add-ssh
 #
 set -euo pipefail
 

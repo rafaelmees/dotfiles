@@ -1,4 +1,5 @@
 add_newline = false
+palette = "dotfiles"
 
 format = """
 $directory\
@@ -9,34 +10,34 @@ $character\
 """
 
 right_format = """
-[](fg:237)\
+[](fg:surface)\
 $cmd_duration\
 $status\
-$time\
+$time
 """
 
 [directory]
-style = "bg:237 fg:255"
+style = "bg:surface fg:strong"
 format = "[ $path]($style)"
 truncate_to_repo = false
 truncation_length = 6
 truncation_symbol = "…/"
 read_only = " "
-read_only_style = "bg:237 fg:250"
+read_only_style = "bg:surface fg:on_surface"
 
 [custom.dircap]
 when = "! git rev-parse --is-inside-work-tree 2>/dev/null"
 command = "true"
-format = "[](fg:237)"
+format = "[](fg:surface)"
 
 [git_branch]
 symbol = " "
-style = "bg:250 fg:239"
-format = "[](fg:237 bg:250)[ $symbol$branch]($style)"
+style = "bg:primary fg:on_primary"
+format = "[](fg:surface bg:primary)[ $symbol$branch]($style)"
 
 [git_status]
-style = "bg:250 fg:239"
-format = "[ $all_status$ahead_behind]($style)[](fg:250)"
+style = "bg:primary fg:on_primary"
+format = "[ $all_status$ahead_behind]($style)[](fg:primary)"
 conflicted = "!"
 ahead = "⇡${count}"
 behind = "⇣${count}"
@@ -51,21 +52,36 @@ deleted = "✘"
 [cmd_duration]
 min_time = 500
 show_milliseconds = false
-style = "bg:237 fg:245"
+style = "bg:surface fg:dim"
 format = "[ $duration]($style)"
 
 [status]
 disabled = false
-style = "bg:237 fg:210"
+style = "bg:surface fg:error"
 format = "[ ✘ $status]($style)"
 
 [time]
 disabled = false
 time_format = "%H:%M:%S"
-style = "bg:237 fg:250"
+style = "bg:surface fg:on_surface"
 format = "[ $time ]($style)"
 
 [character]
-success_symbol = "[](250)"
-error_symbol = "[](250)"
-vimcmd_symbol = "[](250)"
+success_symbol = "[](primary)"
+error_symbol = "[](primary)"
+vimcmd_symbol = "[](primary)"
+
+# >>> dotfiles palette (managed by install) >>>
+[palettes.dotfiles]
+primary = "250"
+on_primary = "239"
+secondary = "240"
+on_secondary = "252"
+surface = "237"
+on_surface = "250"
+background = "235"
+on_background = "250"
+error = "210"
+dim = "245"
+strong = "255"
+# <<< dotfiles palette <<<

@@ -1,0 +1,498 @@
+#!/usr/bin/env bash
+#
+# fleet — a git worktree manager for running several agents in parallel.
+#
+# "bare + worktrees" layout: each repo has one central bare clone (.bare) and
+# every agent works in its own isolated worktree folder, all sharing the same
+# git objects (saves disk, and a single fetch updates them all).
+#
+# Layout:
+#   ~/Development/fleet/
+#     repositories.json          # config: url, base, main and postCreate per repo
+#     <repo>/
+#       .bare/                   # shared bare clone
+#       .git                     # points at ./.bare
+#       <repo>-agent-1/          # agent 1's worktree
+#       <repo>-agent-2/          # agent 2's worktree
+#
+# Usage:
+#   fleet add    <repo> <branch>                     # create a worktree (branch required) + .env + postCreate
+#   fleet open   <repo> <branch|folder|N>            # cd into a worktree (branch, folder or agent number)
+#   fleet list   [repo]                              # list worktrees (git worktree list)
+#   fleet status [repo]                              # dashboard: branch, ahead/behind, dirty, last commit
+#   fleet each   <repo> -- <cmd...>                  # run <cmd> inside each worktree of the repo
+#   fleet rm     [-f] [-b] <repo> <branch|folder|N>  # remove a worktree (asks about the branch; -b deletes it, -f forces)
+#   fleet repos                                      # list configured repos
+#   fleet help                                       # this help
+#
+# Per-repo config (repositories.json): url, base, main and postCreate (optional, e.g. "npm ci").
+# Where the fleet home lives: $FLEET_HOME if set, else the path chosen at install
+# time (~/.config/fleet/home), else ~/Development/fleet.
+
+set -euo pipefail
+
+# --- workspace location -----------------------------------------------------
+# Precedence: $FLEET_HOME env > path saved by install (~/.config/fleet/home) > default.
+resolve_home() {
+  if [ -n "${FLEET_HOME:-}" ]; then
+    printf '%s\n' "$FLEET_HOME"; return
+  fi
+  local saved="$HOME/.config/fleet/home" home
+  if [ -f "$saved" ] && home="$(cat "$saved" 2>/dev/null)" && [ -n "$home" ]; then
+    printf '%s\n' "$home"; return
+  fi
+  printf '%s\n' "$HOME/Development/fleet"
+}
+FLEET_DIR="$(resolve_home)"
+CONFIG="$FLEET_DIR/repositories.json"
+
+# --- colors / logging -------------------------------------------------------
+if [ -t 1 ]; then
+  BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GREEN=$'\033[32m'
+  YELLOW=$'\033[33m'; BLUE=$'\033[34m'; CYAN=$'\033[36m'; RESET=$'\033[0m'
+else
+  BOLD=""; DIM=""; RED=""; GREEN=""; YELLOW=""; BLUE=""; CYAN=""; RESET=""
+fi
+
+info()  { printf '%s»%s %s\n'  "$BLUE"   "$RESET" "$*"; }
+ok()    { printf '%s✓%s %s\n'  "$GREEN"  "$RESET" "$*"; }
+warn()  { printf '%s!%s %s\n'  "$YELLOW" "$RESET" "$*" >&2; }
+die()   { printf '%s✗%s %s\n'  "$RED"    "$RESET" "$*" >&2; exit 1; }
+
+# yes/no prompt on the terminal; non-interactive falls back to $2 (default 'n')
+confirm() {
+  local prompt="$1" default="${2:-n}" hint reply
+  if [ ! -t 0 ]; then
+    [ "$default" = y ]; return
+  fi
+  hint="[y/N]"; [ "$default" = y ] && hint="[Y/n]"
+  printf '%s?%s %s %s ' "$YELLOW" "$RESET" "$prompt" "$hint" >&2
+  read -r reply || reply=""
+  reply="${reply:-$default}"
+  case "$reply" in [yY]*) return 0 ;; *) return 1 ;; esac
+}
+
+# tells the shell wrapper (via $FLEET_CD_FILE) which folder to cd into
+emit_cd() { [ -n "${FLEET_CD_FILE:-}" ] || return 0; printf '%s\n' "$1" > "$FLEET_CD_FILE"; }
+
+# opens a worktree: cd via the shell wrapper, or prints the path to cd manually
+go_to() {
+  local path="$1"
+  emit_cd "$path"
+  if [ -n "${FLEET_CD_FILE:-}" ]; then
+    ok "→ ${BOLD}$(basename "$path")${RESET}"
+  else
+    printf '\n  %scd %s%s\n\n' "$BOLD" "$path" "$RESET"
+    warn "shell wrapper not active — cd shown above (restart your shell after installing)."
+  fi
+}
+
+# --- prerequisites ----------------------------------------------------------
+need_prereqs() {
+  command -v git >/dev/null || die "git not found."
+  command -v jq  >/dev/null || die "jq not found (brew install jq)."
+  [ -f "$CONFIG" ] || die "config not found: $CONFIG
+  Set FLEET_HOME or create the file (see repositories.example.json)."
+}
+
+# --- config helpers ---------------------------------------------------------
+# cfg <repo> <field>  -> prints the value, or empty
+cfg() { jq -r --arg r "$1" --arg k "$2" '.repositories[$r][$k] // empty' "$CONFIG"; }
+
+repo_exists() { [ "$(jq -r --arg r "$1" '.repositories | has($r)' "$CONFIG")" = "true" ]; }
+
+list_repos() { jq -r '.repositories | keys[]' "$CONFIG"; }
+
+# lists the agent worktree paths of a repo (skips the .bare)
+agent_paths() {
+  git -C "$1" worktree list --porcelain 2>/dev/null | awk '
+    /^worktree /{ p=$2; b=0 }
+    /^bare/     { b=1 }
+    /^$/        { if (!b && p!="") print p; p="" }
+    END         { if (!b && p!="") print p }'
+}
+
+# emits "path<TAB>branch" for each agent worktree (skips the .bare)
+worktree_rows() {
+  git -C "$1" worktree list --porcelain 2>/dev/null | awk '
+    /^worktree /{ p=$2; b=""; bare=0 }
+    /^bare/     { bare=1 }
+    /^branch /  { b=$2; sub(/^refs\/heads\//, "", b) }
+    /^$/        { if (!bare && p!="") printf "%s\t%s\n", p, b; p="" }
+    END         { if (!bare && p!="") printf "%s\t%s\n", p, b }'
+}
+
+# path of the worktree checked out on <branch>, or empty
+worktree_for_branch() {
+  worktree_rows "$1" | awk -F'\t' -v b="$2" '$2==b { print $1; exit }'
+}
+
+# resolves <id> (agent number, folder name or branch) to a worktree path, or empty
+resolve_worktree_path() {
+  local repo_dir="$1" repo="$2" id="$3" path
+  if [[ "$id" =~ ^[0-9]+$ ]]; then
+    path="$repo_dir/${repo}-agent-${id}"
+    [ -d "$path" ] && { printf '%s\n' "$path"; return 0; }
+  fi
+  if [ -d "$repo_dir/$id" ]; then
+    printf '%s\n' "$repo_dir/$id"; return 0
+  fi
+  worktree_for_branch "$repo_dir" "$id"
+}
+
+# makes sure the repo's bare clone exists; creates it on first use
+ensure_bare() {
+  local repo="$1"
+  local repo_dir="$FLEET_DIR/$repo"
+  local bare="$repo_dir/.bare"
+
+  [ -d "$bare" ] && return 0
+
+  local url; url="$(cfg "$repo" url)"
+  [ -n "$url" ] || die "repo '$repo' has no 'url' in the config."
+
+  info "Cloning ${BOLD}$repo${RESET} (bare) — first time, this may take a while..."
+  mkdir -p "$repo_dir"
+  git clone --bare "$url" "$bare" >/dev/null
+  # refspec so refs/remotes/origin/* get populated like in a normal clone
+  git --git-dir="$bare" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+  printf 'gitdir: ./.bare\n' > "$repo_dir/.git"
+  git -C "$repo_dir" fetch origin --quiet
+  ok "Bare clone ready at $repo_dir/.bare"
+}
+
+# next agent number for the repo (max existing + 1, robust to removals)
+next_agent_number() {
+  local repo="$1"
+  local repo_dir="$FLEET_DIR/$repo"
+  local max=0 name n d
+  shopt -s nullglob
+  for d in "$repo_dir/${repo}-agent-"*/; do
+    name="$(basename "$d")"
+    n="${name##*-agent-}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue
+    (( n > max )) && max="$n"
+  done
+  shopt -u nullglob
+  echo $(( max + 1 ))
+}
+
+# seeds .env from an example if present, and warns (never copies ready secrets)
+seed_env() {
+  local path="$1" ex
+  for ex in .env.example .env.sample .env.dist .env.template; do
+    if [ -f "$path/$ex" ]; then
+      if [ ! -f "$path/.env" ]; then
+        cp "$path/$ex" "$path/.env"
+        warn "Seeded ${BOLD}.env${RESET} from $ex — ${YELLOW}fill in the secrets before running the project.${RESET}"
+      fi
+      return 0
+    fi
+  done
+  warn "No .env.example found — if the project needs a .env, set it up manually."
+}
+
+# runs the repo's postCreate command (if any) inside the worktree; never aborts on failure
+run_post_create() {
+  local repo="$1" path="$2" folder="$3" cmd
+  cmd="$(cfg "$repo" postCreate)"
+  [ -n "$cmd" ] || return 0
+  info "postCreate: ${DIM}$cmd${RESET}"
+  if ( cd "$path" && eval "$cmd" ); then
+    ok "postCreate done."
+  else
+    warn "postCreate failed — run it manually inside $folder."
+  fi
+}
+
+# ============================================================================
+# commands
+# ============================================================================
+
+cmd_add() {
+  local repo="${1:-}" branch="${2:-}"
+  [ -n "$repo" ]   || die "usage: fleet add <repo> <branch>"
+  [ -n "$branch" ] || die "usage: fleet add <repo> <branch> — provide the branch name."
+  repo_exists "$repo" || die "repo '$repo' is not in the config. See: fleet repos"
+  git check-ref-format --branch "$branch" >/dev/null 2>&1 \
+    || die "invalid branch name: '$branch'."
+
+  local base; base="$(cfg "$repo" base)"
+  [ -n "$base" ] || die "repo '$repo' has no 'base' in the config."
+
+  ensure_bare "$repo"
+
+  local repo_dir="$FLEET_DIR/$repo"
+  info "Updating refs from origin..."
+  git -C "$repo_dir" fetch origin --prune --quiet
+
+  git -C "$repo_dir" show-ref --verify --quiet "refs/remotes/origin/$base" \
+    || die "base branch 'origin/$base' does not exist in $repo. Fix 'base' in the config."
+
+  local from_existing=0
+  if git -C "$repo_dir" show-ref --verify --quiet "refs/heads/$branch"; then
+    local existing; existing="$(worktree_for_branch "$repo_dir" "$branch" || true)"
+    if [ -n "$existing" ]; then
+      warn "branch '$branch' already exists (worktree: ${BOLD}$(basename "$existing")${RESET})."
+      confirm "Open it instead?" y || die "Aborted. Pick another branch name."
+      go_to "$existing"; return
+    fi
+    warn "branch '$branch' already exists but has no worktree."
+    confirm "Create a worktree from the existing branch?" y || die "Aborted. Pick another branch name."
+    from_existing=1
+  fi
+
+  local num folder path
+  num="$(next_agent_number "$repo")"
+  folder="${repo}-agent-${num}"
+  path="$repo_dir/$folder"
+  [ -e "$path" ] && die "folder '$folder' already exists."
+
+  # atomic add: if setup fails after the worktree is created, roll everything back
+  local created=0
+  cleanup_add() {
+    [ "$created" = 1 ] || return
+    warn "Setup failed — undoing worktree $folder..."
+    git -C "$repo_dir" worktree remove --force "$path" 2>/dev/null || true
+    [ "$from_existing" = 1 ] || git -C "$repo_dir" branch -D "$branch" 2>/dev/null || true
+  }
+  trap cleanup_add ERR
+
+  if [ "$from_existing" = 1 ]; then
+    info "Creating worktree ${BOLD}$folder${RESET}: existing branch ${CYAN}$branch${RESET}"
+    git -C "$repo_dir" worktree add "$path" "$branch" >/dev/null
+  else
+    info "Creating worktree ${BOLD}$folder${RESET}: branch ${CYAN}$branch${RESET} from ${CYAN}origin/$base${RESET}"
+    git -C "$repo_dir" worktree add "$path" -b "$branch" "origin/$base" >/dev/null
+  fi
+  created=1
+
+  seed_env "$path"
+  run_post_create "$repo" "$path" "$folder"
+
+  trap - ERR
+
+  ok "Worktree ready!"
+  printf '\n  %sfolder:%s  %s\n' "$DIM" "$RESET" "$path"
+  printf '  %sbranch:%s  %s (base: %s)\n' "$DIM" "$RESET" "$branch" "$base"
+  printf '\n  %scd %s%s\n\n' "$BOLD" "$path" "$RESET"
+}
+
+cmd_open() {
+  local repo="${1:-}" id="${2:-}"
+  [ -n "$repo" ] && [ -n "$id" ] || die "usage: fleet open <repo> <branch|folder|number>"
+  repo_exists "$repo" || die "repo '$repo' is not in the config. See: fleet repos"
+
+  local repo_dir="$FLEET_DIR/$repo"
+  [ -d "$repo_dir/.bare" ] || die "repo '$repo' hasn't been cloned yet (use: fleet add $repo <branch>)."
+
+  local path; path="$(resolve_worktree_path "$repo_dir" "$repo" "$id" || true)"
+  [ -n "$path" ] || die "no worktree for '$id' in $repo. See: fleet list $repo"
+  go_to "$path"
+}
+
+cmd_list() {
+  local repo="${1:-}"
+  if [ -n "$repo" ]; then
+    repo_exists "$repo" || die "repo '$repo' is not in the config."
+    [ -d "$FLEET_DIR/$repo/.bare" ] || die "repo '$repo' hasn't been cloned yet (use: fleet add $repo <branch>)."
+    printf '%s%s%s\n' "$BOLD" "$repo" "$RESET"
+    git -C "$FLEET_DIR/$repo" worktree list
+    return
+  fi
+  local r found=0
+  for r in $(list_repos); do
+    if [ -d "$FLEET_DIR/$r/.bare" ]; then
+      found=1
+      printf '%s%s%s\n' "$BOLD" "$r" "$RESET"
+      git -C "$FLEET_DIR/$r" worktree list | sed 's/^/  /'
+      echo
+    fi
+  done
+  [ "$found" = 1 ] || info "No repos cloned yet. Use: fleet add <repo> <branch>"
+}
+
+# prints one dashboard row for a worktree
+status_row() {
+  local base="$1" path="$2"
+  local folder branch ab ahead behind state dirty last
+  folder="$(basename "$path")"
+  branch="$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  [ "$branch" = HEAD ] && branch="(detached)"
+
+  if ab="$(git -C "$path" rev-list --left-right --count "origin/$base...HEAD" 2>/dev/null)"; then
+    behind="${ab%%[[:space:]]*}"; ahead="${ab##*[[:space:]]}"
+  else
+    behind="?"; ahead="?"
+  fi
+
+  dirty="$(git -C "$path" status --porcelain 2>/dev/null | grep -c '' || true)"
+  if [ "$dirty" = 0 ]; then
+    state="${GREEN}✓ clean${RESET}"
+  else
+    state="${YELLOW}● ${dirty} mod${RESET}"
+  fi
+
+  last="$(git -C "$path" log -1 --format='%cr · %s' 2>/dev/null || echo '-')"
+  [ "${#last}" -gt 32 ] && last="${last:0:31}…"
+
+  # manual padding (arrows are multibyte; %-Ns would count bytes and misalign)
+  local vis pad ab_disp
+  vis=$(( 3 + ${#ahead} + ${#behind} ))
+  pad=$(( 12 - vis )); [ "$pad" -lt 1 ] && pad=1
+  printf -v ab_disp '↑%s ↓%s%*s' "$ahead" "$behind" "$pad" ""
+
+  printf '  %-26s %-22s %s %-34s %b\n' \
+    "$folder" "$branch" "$ab_disp" "$last" "$state"
+}
+
+cmd_status() {
+  local repo="${1:-}" repos
+  if [ -n "$repo" ]; then
+    repo_exists "$repo" || die "repo '$repo' is not in the config."
+    repos="$repo"
+  else
+    repos="$(list_repos)"
+  fi
+
+  local r base repo_dir path found=0
+  for r in $repos; do
+    repo_dir="$FLEET_DIR/$r"
+    [ -d "$repo_dir/.bare" ] || continue
+    found=1
+    base="$(cfg "$r" base)"
+    printf '%s%s%s %s(base: origin/%s)%s\n' "$BOLD" "$r" "$RESET" "$DIM" "$base" "$RESET"
+    printf '  %s%-26s %-22s %-12s %-34s %s%s\n' \
+      "$DIM" "AGENT" "BRANCH" "AHEAD/BEHIND" "LAST COMMIT" "STATE" "$RESET"
+    while IFS= read -r path; do
+      [ -n "$path" ] && status_row "$base" "$path"
+    done < <(agent_paths "$repo_dir")
+    echo
+  done
+  [ "$found" = 1 ] || info "No repos cloned yet. Use: fleet add <repo> <branch>"
+}
+
+cmd_each() {
+  local repo="${1:-}"; shift || true
+  [ -n "$repo" ] || die "usage: fleet each <repo> -- <cmd...>"
+  repo_exists "$repo" || die "repo '$repo' is not in the config."
+  [ "${1:-}" = "--" ] && shift
+  [ "$#" -gt 0 ] || die "usage: fleet each <repo> -- <cmd...>"
+
+  local repo_dir="$FLEET_DIR/$repo"
+  [ -d "$repo_dir/.bare" ] || die "repo '$repo' hasn't been cloned yet."
+
+  local any=0 path folder rc
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    any=1
+    folder="$(basename "$path")"
+    printf '%s» %s%s%s\n' "$BLUE" "$BOLD" "$folder" "$RESET"
+    if ( cd "$path" && "$@" ); then :; else rc=$?; warn "  ($folder exited with code $rc)"; fi
+  done < <(agent_paths "$repo_dir")
+  [ "$any" = 1 ] || info "No worktrees in $repo. Create one with: fleet add $repo <branch>"
+  return 0
+}
+
+cmd_rm() {
+  local force="" del_branch=0
+  while [ "${1:-}" = "-f" ] || [ "${1:-}" = "-b" ] || [ "${1:-}" = "--branch" ]; do
+    case "$1" in
+      -f)          force="--force" ;;
+      -b|--branch) del_branch=1 ;;
+    esac
+    shift
+  done
+  local repo="${1:-}" id="${2:-}"
+  [ -n "$repo" ] && [ -n "$id" ] || die "usage: fleet rm [-f] [-b] <repo> <branch|folder|number>"
+  repo_exists "$repo" || die "repo '$repo' is not in the config."
+
+  local repo_dir="$FLEET_DIR/$repo"
+  [ -d "$repo_dir/.bare" ] || die "repo '$repo' hasn't been cloned yet."
+
+  local path; path="$(resolve_worktree_path "$repo_dir" "$repo" "$id" || true)"
+
+  # worktree already gone: if a branch by that name lingers, offer to delete it
+  if [ -z "$path" ]; then
+    if git -C "$repo_dir" show-ref --verify --quiet "refs/heads/$id"; then
+      warn "no worktree '$id', but branch ${CYAN}$id${RESET} still exists."
+      if [ "$del_branch" = 1 ] || confirm "Delete the branch?" n; then
+        git -C "$repo_dir" branch -D "$id" >/dev/null 2>&1 \
+          && ok "Deleted branch ${CYAN}$id${RESET}." \
+          || die "Couldn't delete branch '$id' (not fully merged? use: git -C $repo_dir branch -D $id)."
+      else
+        info "Nothing removed."
+      fi
+      return
+    fi
+    die "worktree not found: $id (and no branch by that name)."
+  fi
+
+  local folder; folder="$(basename "$path")"
+  local branch; branch="$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+
+  info "Removing worktree $folder..."
+  git -C "$repo_dir" worktree remove $force "$path" 2>/dev/null \
+    || die "Removal failed (uncommitted changes?). Force with: fleet rm -f $repo $id"
+  ok "Removed worktree $folder."
+
+  if [ -n "$branch" ] && [ "$branch" != HEAD ]; then
+    if [ "$del_branch" = 1 ] || confirm "Delete branch '$branch' too?" n; then
+      git -C "$repo_dir" branch -D "$branch" >/dev/null 2>&1 \
+        && ok "Deleted branch ${CYAN}$branch${RESET}." \
+        || warn "Couldn't delete branch '$branch' (not fully merged?)."
+    else
+      info "Branch ${CYAN}$branch${RESET} kept."
+    fi
+  fi
+}
+
+cmd_repos() {
+  printf '%s%-22s %-10s %-10s %s%s\n' "$BOLD" "REPO" "BASE" "MAIN" "STATUS" "$RESET"
+  local r base main status
+  for r in $(list_repos); do
+    base="$(cfg "$r" base)"; main="$(cfg "$r" main)"
+    if [ -d "$FLEET_DIR/$r/.bare" ]; then
+      status="${GREEN}cloned${RESET}"
+    else
+      status="${DIM}not cloned${RESET}"
+    fi
+    printf '%-22s %-10s %-10s %b\n' "$r" "$base" "$main" "$status"
+  done
+}
+
+cmd_help() {
+  # prints the header comment block (from line 3 until the first non-'#' line)
+  awk 'NR>=3 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"
+}
+
+# emits candidates for the autocomplete (quiet; used by fleet-completion)
+cmd_complete() {
+  local what="${1:-}"; shift || true
+  case "$what" in
+    cmds)  printf '%s\n' add open list ls status st each rm remove repos help ;;
+    repos)
+      command -v jq >/dev/null 2>&1 || return 0
+      [ -f "$CONFIG" ] || return 0
+      list_repos 2>/dev/null ;;
+    folders)
+      local repo="${1:-}"; [ -n "$repo" ] || return 0
+      agent_paths "$FLEET_DIR/$repo" | while IFS= read -r p; do
+        [ -n "$p" ] && basename "$p"
+      done ;;
+  esac
+}
+
+# --- dispatch ---------------------------------------------------------------
+case "${1:-help}" in
+  add)            shift; need_prereqs; cmd_add    "$@" ;;
+  open)           shift; need_prereqs; cmd_open   "$@" ;;
+  list|ls)        shift; need_prereqs; cmd_list   "$@" ;;
+  status|st)      shift; need_prereqs; cmd_status "$@" ;;
+  each)           shift; need_prereqs; cmd_each   "$@" ;;
+  rm|remove)      shift; need_prereqs; cmd_rm     "$@" ;;
+  repos)          shift; need_prereqs; cmd_repos  "$@" ;;
+  __complete)     shift; cmd_complete "$@" ;;
+  help|-h|--help) cmd_help ;;
+  *)              die "unknown command: $1 (use: fleet help)" ;;
+esac

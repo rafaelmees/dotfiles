@@ -1,0 +1,10 @@
+{
+  "repositories": {
+    "my-app": {
+      "url": "git@github.com:acme/my-app.git",
+      "base": "develop",
+      "main": "main",
+      "postCreate": "npm ci"
+    }
+  }
+}

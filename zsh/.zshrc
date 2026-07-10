@@ -28,9 +28,33 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # mise - version manager (node, etc.)
 # Enables automatic per-directory version switching and reads .nvmrc/.tool-versions/mise.toml.
-eval "$(mise activate zsh)"
+command -v mise >/dev/null 2>&1 && eval "$(mise activate zsh)"
 
-eval "$(starship init zsh)"
+command -v starship >/dev/null 2>&1 && eval "$(starship init zsh)"
+
+# fleet completion (bash-style; needs zsh's compinit + bashcompinit shims)
+if [ -f "$HOME/.config/fleet/completion.bash" ]; then
+  autoload -U compinit && compinit
+  autoload -U +X bashcompinit && bashcompinit
+  source "$HOME/.config/fleet/completion.bash"
+fi
+
+# fleet wrapper: lets `open`/`add`/`rm` cd the current shell into a worktree.
+# The command can't change the parent shell's cwd, so it writes the target path
+# to $FLEET_CD_FILE and we cd here.
+fleet() {
+  case "${1:-}" in
+    open|add|rm|remove)
+      local _cd _rc _dir
+      _cd="$(mktemp "${TMPDIR:-/tmp}/fleet-cd.XXXXXX")" || { command fleet "$@"; return; }
+      FLEET_CD_FILE="$_cd" command fleet "$@"; _rc=$?
+      _dir="$(cat "$_cd" 2>/dev/null)"; rm -f "$_cd"
+      [ -n "$_dir" ] && [ -d "$_dir" ] && cd "$_dir"
+      return $_rc
+      ;;
+    *) command fleet "$@" ;;
+  esac
+}
 
 if command -v tmux >/dev/null && [ -z "$TMUX" ]; then
   tmux attach-session -t main || tmux new-session -s main

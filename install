@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+#
+# Installs the dotfiles via symlinks.
+# - Idempotent: run it as many times as you like.
+# - Backs up any existing file before replacing it.
+# - brew always runs (already-installed packages are skipped, not re-installed).
+# - Cross-platform: macOS (formulae + casks) and Linux (formulae only, CLI setup).
+#
+# Usage:
+#   ./install                 # install deps (brew) + create the symlinks
+#   ./install --upgrade        # also upgrade already-installed brew packages
+#   ./install --add-ssh        # also run ./add-ssh to generate SSH keys
+#   ./install --install-claude # also run ./claude/install (Claude Code + plugins)
+#   ./install --install-fleet  # also run ./fleet/install (git worktree manager)
+#
+# Pick what to set up (each component = its brew package(s) + its symlinks):
+#   tmux  neovim(=vim)  starship  mise  ghostty  fonts  mediakeys  zsh
+#   --only <a,b>   set up only these components
+#   --skip <a,b>   set up everything except these
+# (ghostty/fonts/mediakeys are macOS-only and ignored on Linux.)
+#
+#   --keep-zshrc   don't replace ~/.zshrc; keep it and append a block that sources
+#                  ours (so your existing zsh config is preserved). Default replaces
+#                  ~/.zshrc with a symlink (the old file is backed up either way).
+#
+# Theme colors (256-color indices; default to the current scheme when omitted).
+# When any of these is passed, the shared palette is regenerated in both
+# tmux/theme.conf and starship/starship.toml so the two never drift apart:
+#   --primary N       highlight bg (selected tab / git branch)   [250]
+#   --on-primary N    text on primary                            [239]
+#   --secondary N     secondary segment bg (session / clock)     [240]
+#   --on-secondary N  text on secondary                          [252]
+#   --surface N       surface bg (inactive tab / prompt segment) [237]
+#   --on-surface N    text on surface                            [250]
+#   --background N    tmux status-bar bg                         [235]
+#   --on-background N reserved, not used yet                     [250]
+set -euo pipefail
+
+DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)"
+
+# Built-in defaults — used on a fresh machine and by the `default` flag value.
+DEF_PRIMARY=250;  DEF_ON_PRIMARY=239;  DEF_SECONDARY=240;   DEF_ON_SECONDARY=252
+DEF_SURFACE=237;  DEF_ON_SURFACE=250;  DEF_BACKGROUND=235;  DEF_ON_BACKGROUND=250
+# Fixed roles (not exposed as flags).
+ERROR=210; BORDER=236; DIM=245; STRONG=255
+
+# Working values — seeded from the currently applied palette (see
+# load_palette_baseline) so a plain run keeps whatever was last customized.
+PRIMARY=$DEF_PRIMARY;   ON_PRIMARY=$DEF_ON_PRIMARY
+SECONDARY=$DEF_SECONDARY; ON_SECONDARY=$DEF_ON_SECONDARY
+SURFACE=$DEF_SURFACE;   ON_SURFACE=$DEF_ON_SURFACE
+BACKGROUND=$DEF_BACKGROUND; ON_BACKGROUND=$DEF_ON_BACKGROUND
+THEME_CUSTOM=false
+
+PALETTE_START="# >>> dotfiles palette (managed by install) >>>"
+PALETTE_END="# <<< dotfiles palette <<<"
+
+IS_MACOS=false
+[ "$(uname -s)" = "Darwin" ] && IS_MACOS=true
+
+# Component selection (--only / --skip). Empty = install everything.
+KNOWN_COMPONENTS="tmux neovim starship mise ghostty fonts mediakeys zsh"
+SKIP="" ONLY=""
+
+# --keep-zshrc: keep the user's ~/.zshrc and source ours from it (see link_zshrc).
+KEEP_ZSHRC=false
+ZSHRC_START="# >>> dotfiles zsh (managed by install) >>>"
+ZSHRC_END="# <<< dotfiles zsh <<<"
+
+# Brew package lists — built from the selected components in build_brew_lists.
+BREW_FORMULAE=()
+BREW_CASKS=()
+
+info()  { printf "\033[1;37m==>\033[0m %s\n" "$1"; }
+ok()    { printf "\033[1;32m  ✓\033[0m %s\n" "$1"; }
+warn()  { printf "\033[1;33m  !\033[0m %s\n" "$1"; }
+
+# Appends comma/space-separated tokens to a list var (vim is an alias for neovim).
+add_list() {
+  local t
+  for t in ${2//,/ }; do
+    [ "$t" = vim ] && t=neovim
+    [ -n "$t" ] && eval "$1=\"\${$1:+\$$1,}\$t\""
+  done
+}
+
+# want <component> — true unless skipped, or unless --only is set and excludes it.
+want() {
+  case ",$SKIP," in *",$1,"*) return 1 ;; esac
+  if [ -n "$ONLY" ]; then
+    case ",$ONLY," in *",$1,"*) return 0 ;; *) return 1 ;; esac
+  fi
+  return 0
+}
+
+# Warns about component names that aren't recognized (likely typos).
+validate_components() {
+  local t
+  for t in ${SKIP//,/ } ${ONLY//,/ }; do
+    case " $KNOWN_COMPONENTS " in *" $t "*) ;; *) warn "unknown component: $t (known: $KNOWN_COMPONENTS)" ;; esac
+  done
+}
+
+# Builds the brew formula/cask lists from the selected components.
+build_brew_lists() {
+  BREW_FORMULAE=(); BREW_CASKS=()
+  want tmux      && BREW_FORMULAE+=(tmux)
+  want neovim    && BREW_FORMULAE+=(neovim tree-sitter-cli)
+  want starship  && BREW_FORMULAE+=(starship)
+  want mise      && BREW_FORMULAE+=(mise)
+  want ghostty   && BREW_CASKS+=(ghostty)
+  want fonts     && BREW_CASKS+=(font-jetbrains-mono-nerd-font)
+  want mediakeys && BREW_CASKS+=(macmediakeyforwarder)
+  return 0
+}
+
+# Creates a symlink $2 -> $1, backing up anything that already exists at $2.
+link() {
+  local src="$DOTFILES/$1"
+  local dest="$2"
+
+  mkdir -p "$(dirname "$dest")"
+
+  # Already the correct symlink? Nothing to do.
+  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+    ok "$dest (already linked)"
+    return
+  fi
+
+  # Something already there? Back it up.
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    mkdir -p "$BACKUP_DIR"
+    mv "$dest" "$BACKUP_DIR/"
+    warn "backup: $dest -> $BACKUP_DIR/"
+  fi
+
+  ln -s "$src" "$dest"
+  ok "$dest -> $src"
+}
+
+# Makes sure the `brew` command is available in this script's PATH.
+ensure_brew() {
+  if command -v brew >/dev/null 2>&1; then
+    return
+  fi
+
+  info "Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # A fresh install isn't on PATH yet — locate it (path differs on macOS/Linux).
+  local candidate
+  for candidate in \
+    /opt/homebrew/bin/brew \
+    /usr/local/bin/brew \
+    /home/linuxbrew/.linuxbrew/bin/brew \
+    "$HOME/.linuxbrew/bin/brew"; do
+    if [ -x "$candidate" ]; then
+      eval "$("$candidate" shellenv)"
+      return
+    fi
+  done
+
+  warn "brew was installed but isn't on PATH — open a new shell and re-run."
+  exit 1
+}
+
+install_brew_deps() {
+  local do_upgrade="$1"
+
+  build_brew_lists
+
+  if [ "${#BREW_FORMULAE[@]}" -eq 0 ] && { [ "$IS_MACOS" = false ] || [ "${#BREW_CASKS[@]}" -eq 0 ]; }; then
+    info "No brew packages selected — skipping dependency install."
+    return
+  fi
+
+  ensure_brew
+
+  info "Installing dependencies (brew)..."
+  [ "${#BREW_FORMULAE[@]}" -gt 0 ] && brew install "${BREW_FORMULAE[@]}"
+  [ "$IS_MACOS" = true ] && [ "${#BREW_CASKS[@]}" -gt 0 ] && brew install --cask "${BREW_CASKS[@]}"
+
+  if [ "$do_upgrade" = true ]; then
+    info "Upgrading packages (brew upgrade)..."
+    [ "${#BREW_FORMULAE[@]}" -gt 0 ] && brew upgrade "${BREW_FORMULAE[@]}"
+    [ "$IS_MACOS" = true ] && [ "${#BREW_CASKS[@]}" -gt 0 ] && brew upgrade --cask "${BREW_CASKS[@]}"
+  fi
+
+  if [ "$IS_MACOS" = false ]; then
+    warn "Linux: skipped ghostty and the Nerd Font (GUI-only)."
+    warn "Linux: for tmux clipboard, install xclip or wl-clipboard via your distro."
+  fi
+
+  ok "dependencies installed"
+}
+
+# Reads the current value of a @token from tmux/theme.conf (echoes "" if absent).
+read_palette_token() {
+  grep -E "^set -g @$1 " "$DOTFILES/tmux/theme.conf" 2>/dev/null \
+    | grep -oE 'colour[0-9]+' | grep -oE '[0-9]+' | head -1
+}
+
+# Seeds the working colors from the last-applied palette so customizations
+# survive a plain `./install`. Missing tokens fall back to the defaults.
+load_palette_baseline() {
+  local v
+  v="$(read_palette_token primary)";       PRIMARY="${v:-$DEF_PRIMARY}"
+  v="$(read_palette_token on_primary)";    ON_PRIMARY="${v:-$DEF_ON_PRIMARY}"
+  v="$(read_palette_token secondary)";     SECONDARY="${v:-$DEF_SECONDARY}"
+  v="$(read_palette_token on_secondary)";  ON_SECONDARY="${v:-$DEF_ON_SECONDARY}"
+  v="$(read_palette_token surface)";       SURFACE="${v:-$DEF_SURFACE}"
+  v="$(read_palette_token on_surface)";    ON_SURFACE="${v:-$DEF_ON_SURFACE}"
+  v="$(read_palette_token background)";    BACKGROUND="${v:-$DEF_BACKGROUND}"
+  v="$(read_palette_token on_background)"; ON_BACKGROUND="${v:-$DEF_ON_BACKGROUND}"
+}
+
+# set_color VAR VALUE DEFAULT — assigns VALUE (or DEFAULT when VALUE is
+# "default") to VAR and marks the theme as customized.
+set_color() {
+  local val="$2"
+  [ "$val" = default ] && val="$3"
+  eval "$1=\$val"
+  THEME_CUSTOM=true
+}
+
+# Reloads the running tmux server, if any, so changes apply without a restart.
+reload_tmux() {
+  want tmux || return 0
+  local conf="$HOME/.config/tmux/tmux.conf"
+  [ -f "$conf" ] || return 0
+  if command -v tmux >/dev/null 2>&1 && tmux info >/dev/null 2>&1; then
+    tmux source-file "$conf" && ok "tmux reloaded" || warn "tmux reload failed"
+  fi
+  return 0
+}
+
+# Replaces the lines between PALETTE_START/PALETTE_END in $1 with stdin.
+splice_palette() {
+  local file="$1" inner start end
+  inner="$(cat)"
+  start="$(grep -nF "$PALETTE_START" "$file" | head -1 | cut -d: -f1)"
+  end="$(grep -nF "$PALETTE_END" "$file" | head -1 | cut -d: -f1)"
+  if [ -z "$start" ] || [ -z "$end" ]; then
+    warn "palette markers not found in $file — skipped"
+    return
+  fi
+  {
+    head -n "$start" "$file"
+    printf '%s\n' "$inner"
+    tail -n +"$end" "$file"
+  } >"$file.tmp" && mv "$file.tmp" "$file"
+}
+
+# Regenerates the palette block in both configs from the color variables.
+apply_theme() {
+  info "Applying color palette..."
+  splice_palette "$DOTFILES/tmux/theme.conf" <<EOF
+set -g @primary       "colour$PRIMARY"
+set -g @on_primary    "colour$ON_PRIMARY"
+set -g @secondary     "colour$SECONDARY"
+set -g @on_secondary  "colour$ON_SECONDARY"
+set -g @surface       "colour$SURFACE"
+set -g @on_surface    "colour$ON_SURFACE"
+set -g @background    "colour$BACKGROUND"
+set -g @on_background  "colour$ON_BACKGROUND"
+
+set -g status-style             "bg=colour$BACKGROUND,fg=colour$ON_SURFACE"
+set -g pane-border-style        "fg=colour$BORDER"
+set -g pane-active-border-style "fg=colour$PRIMARY"
+set -g message-style            "bg=colour$BACKGROUND,fg=white"
+EOF
+
+  splice_palette "$DOTFILES/starship/starship.toml" <<EOF
+[palettes.dotfiles]
+primary = "$PRIMARY"
+on_primary = "$ON_PRIMARY"
+secondary = "$SECONDARY"
+on_secondary = "$ON_SECONDARY"
+surface = "$SURFACE"
+on_surface = "$ON_SURFACE"
+background = "$BACKGROUND"
+on_background = "$ON_BACKGROUND"
+error = "$ERROR"
+dim = "$DIM"
+strong = "$STRONG"
+EOF
+  ok "palette applied (tmux + starship)"
+}
+
+# Installs our zsh config. Default: symlink ~/.zshrc -> repo (replaces it, after a
+# backup). With --keep-zshrc: keep the user's ~/.zshrc and append a guarded block
+# that sources ours, so their own config is preserved.
+link_zshrc() {
+  local dest="$HOME/.zshrc" src="$DOTFILES/zsh/.zshrc"
+
+  if [ "$KEEP_ZSHRC" != true ]; then
+    link "zsh/.zshrc" "$dest"
+    return
+  fi
+
+  # Was a full symlink to us (prior default run)? Drop it; we now source instead.
+  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+    rm "$dest"
+  fi
+  if [ -f "$dest" ] && grep -qF "$ZSHRC_START" "$dest"; then
+    ok "$dest already sources the dotfiles zsh config"
+    return
+  fi
+  {
+    printf '\n%s\n' "$ZSHRC_START"
+    printf '[ -f "%s" ] && source "%s"\n' "$src" "$src"
+    printf '%s\n' "$ZSHRC_END"
+  } >> "$dest"
+  ok "appended dotfiles zsh config to $dest (kept your existing config)"
+}
+
+link_all() {
+  info "Creating symlinks..."
+  want ghostty  && link "ghostty/config"         "$HOME/.config/ghostty/config"
+  want neovim   && link "vim/init.lua"           "$HOME/.config/nvim/init.lua"
+  want neovim   && link "vim/lazy-lock.json"     "$HOME/.config/nvim/lazy-lock.json"
+  want starship && link "starship/starship.toml" "$HOME/.config/starship.toml"
+  want mise     && link "mise/config.toml"       "$HOME/.config/mise/config.toml"
+  want tmux     && link "tmux/tmux.conf"         "$HOME/.config/tmux/tmux.conf"
+  want tmux     && link "tmux/theme.conf"        "$HOME/.config/tmux/theme.conf"
+  want zsh      && link_zshrc
+  return 0
+}
+
+# Creates the standard Development directory layout.
+ensure_dev_dirs() {
+  info "Creating ~/Development directories..."
+  mkdir -p "$HOME/Development/projects"
+  ok "$HOME/Development/projects"
+}
+
+main() {
+  local do_upgrade=false do_add_ssh=false do_install_claude=false do_install_fleet=false
+
+  # Seed working colors from the currently applied palette; flags override.
+  # Any color flag also accepts `default` to restore that role's built-in value.
+  load_palette_baseline
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --upgrade)        do_upgrade=true ;;
+      --add-ssh)        do_add_ssh=true ;;
+      --install-claude) do_install_claude=true ;;
+      --install-fleet)  do_install_fleet=true ;;
+      --only)           add_list ONLY "${2:-}"; shift ;;
+      --skip)           add_list SKIP "${2:-}"; shift ;;
+      --keep-zshrc)     KEEP_ZSHRC=true ;;
+      --primary)       set_color PRIMARY       "$2" "$DEF_PRIMARY";       shift ;;
+      --on-primary)    set_color ON_PRIMARY    "$2" "$DEF_ON_PRIMARY";    shift ;;
+      --secondary)     set_color SECONDARY     "$2" "$DEF_SECONDARY";     shift ;;
+      --on-secondary)  set_color ON_SECONDARY  "$2" "$DEF_ON_SECONDARY";  shift ;;
+      --surface)       set_color SURFACE       "$2" "$DEF_SURFACE";       shift ;;
+      --on-surface)    set_color ON_SURFACE    "$2" "$DEF_ON_SURFACE";    shift ;;
+      --background)    set_color BACKGROUND    "$2" "$DEF_BACKGROUND";    shift ;;
+      --on-background) set_color ON_BACKGROUND "$2" "$DEF_ON_BACKGROUND"; shift ;;
+      *) warn "unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  validate_components
+
+  [ "$THEME_CUSTOM" = true ] && apply_theme
+
+  install_brew_deps "$do_upgrade"
+  link_all
+  ensure_dev_dirs
+  reload_tmux
+  [ "$do_add_ssh" = true ] && "$DOTFILES/add-ssh"
+  [ "$do_install_claude" = true ] && "$DOTFILES/claude/install"
+  [ "$do_install_fleet" = true ] && "$DOTFILES/fleet/install"
+
+  info "Done!"
+  [ -d "$BACKUP_DIR" ] && warn "Old files saved in: $BACKUP_DIR"
+  if [ "$IS_MACOS" = true ]; then
+    info "Restart the shell (exec zsh) and Ghostty to apply everything."
+  else
+    info "Restart the shell (exec zsh) to apply everything."
+  fi
+}
+
+main "$@"
