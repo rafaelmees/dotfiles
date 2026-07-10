@@ -12,11 +12,12 @@
 #     <repo>/
 #       .bare/                   # shared bare clone
 #       .git                     # points at ./.bare
+#       .env                     # (optional) real secrets, put here yourself — never committed, never auto-copied
 #       <repo>-agent-1/          # agent 1's worktree
 #       <repo>-agent-2/          # agent 2's worktree
 #
 # Usage:
-#   fleet add    <repo> <branch>                     # create a worktree (branch required) + .env + postCreate
+#   fleet add    <repo> <branch>                     # create a worktree (branch required) + postCreate
 #   fleet open   <repo> <branch|folder|N>            # cd into a worktree (branch, folder or agent number)
 #   fleet list   [repo]                              # list worktrees (git worktree list)
 #   fleet status [repo]                              # dashboard: branch, ahead/behind, dirty, last commit
@@ -26,6 +27,8 @@
 #   fleet help                                       # this help
 #
 # Per-repo config (repositories.json): url, base, main and postCreate (optional, e.g. "npm ci").
+# postCreate runs from inside the new worktree, so ".." is the repo dir — use it to copy
+# real secrets/config into place, e.g.: "npm ci && cp ../.env .env && cp ../config/local.json config/"
 # Where the fleet home lives: $FLEET_HOME if set, else the path chosen at install
 # time (~/.config/fleet/home), else ~/Development/fleet.
 
@@ -177,21 +180,6 @@ next_agent_number() {
   echo $(( max + 1 ))
 }
 
-# seeds .env from an example if present, and warns (never copies ready secrets)
-seed_env() {
-  local path="$1" ex
-  for ex in .env.example .env.sample .env.dist .env.template; do
-    if [ -f "$path/$ex" ]; then
-      if [ ! -f "$path/.env" ]; then
-        cp "$path/$ex" "$path/.env"
-        warn "Seeded ${BOLD}.env${RESET} from $ex — ${YELLOW}fill in the secrets before running the project.${RESET}"
-      fi
-      return 0
-    fi
-  done
-  warn "No .env.example found — if the project needs a .env, set it up manually."
-}
-
 # runs the repo's postCreate command (if any) inside the worktree; never aborts on failure
 run_post_create() {
   local repo="$1" path="$2" folder="$3" cmd
@@ -267,7 +255,6 @@ cmd_add() {
   fi
   created=1
 
-  seed_env "$path"
   run_post_create "$repo" "$path" "$folder"
 
   trap - ERR
