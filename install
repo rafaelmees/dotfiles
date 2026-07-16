@@ -369,6 +369,16 @@ main() {
   [ "$THEME_CUSTOM" = true ] && apply_theme
 
   install_brew_deps "$do_upgrade"
+  if [ "$IS_MACOS" = true ]; then
+    defaults write -g ApplePressAndHoldEnabled -bool false
+    defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+    defaults write com.apple.finder AppleShowAllFiles -bool true
+    defaults write com.apple.finder FXPreferredViewStyle -string "clmv"
+    osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' 2>/dev/null
+    mkdir -p ~/Pictures/Screenshots
+    defaults write com.apple.screencapture location ~/Pictures/Screenshots
+    killall Finder SystemUIServer 2>/dev/null
+  fi
   link_all
   ensure_dev_dirs
   reload_tmux

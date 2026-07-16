@@ -252,6 +252,9 @@ cmd_add() {
   else
     info "Creating worktree ${BOLD}$folder${RESET}: branch ${CYAN}$branch${RESET} from ${CYAN}origin/$base${RESET}"
     git -C "$repo_dir" worktree add "$path" -b "$branch" "origin/$base" >/dev/null
+    # git auto-tracks origin/$base since the branch was cut from it — a plain `push`
+    # would land on base instead of creating/updating $branch. Force explicit -u.
+    git -C "$path" branch --unset-upstream "$branch" 2>/dev/null || true
   fi
   created=1
 
