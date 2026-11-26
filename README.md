@@ -96,7 +96,8 @@ it's live):
 
 | Repo file | System symlink | What it holds |
 |---|---|---|
-| `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Personal instructions for **all** projects (e.g. "no unnecessary comments", language conventions). |
+| `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Personal instructions for **all** projects: code style, working agreements, quality gates, engineering principles. |
+| `claude/templates/ROADMAP.md` | — (copy into a new project) | Skeleton for a project roadmap: structure, batch workflow, specs/prompts/notes, with templates. |
 | `claude/settings.json` | `~/.claude/settings.json` | Vim mode, a permission allowlist (fewer prompts), and the status line. |
 | `claude/statusline.sh` | `~/.claude/statusline.sh` | Grayscale **powerline** status line (pills + `` arrows, same style as the tmux bar): `vim mode ▸ model ▸ dir ▸ branch* ▸ ctx %`. Needs a Nerd Font, like tmux. |
 
