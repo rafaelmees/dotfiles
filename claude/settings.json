@@ -40,7 +40,8 @@
   },
   "enabledPlugins": {
     "caveman@caveman": true,
-    "ponytail@ponytail": true
+    "ponytail@ponytail": true,
+    "postman@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
