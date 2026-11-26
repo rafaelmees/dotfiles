@@ -100,6 +100,22 @@ it's live):
 | `claude/templates/ROADMAP.md` | — (copy into a new project) | Skeleton for a project roadmap: structure, batch workflow, specs/prompts/notes, with templates. |
 | `claude/settings.json` | `~/.claude/settings.json` | Vim mode, a permission allowlist (fewer prompts), and the status line. |
 | `claude/statusline.sh` | `~/.claude/statusline.sh` | Grayscale **powerline** status line (pills + `` arrows, same style as the tmux bar): `vim mode ▸ model ▸ dir ▸ branch* ▸ ctx %`. Needs a Nerd Font, like tmux. |
+| `claude/claude-as` | `~/.local/bin/claude-as` | Runs Claude with a named account (see below). |
+
+**Multiple accounts.** The default account is `~/.claude` (plain `claude`).
+Any other account is just a name; the dotfiles don't list them:
+
+```sh
+claude-as personal          # ~/.claude-personal
+claude-as work --resume     # ~/.claude-work, extra args go to claude
+```
+
+Each account keeps its own login, memory, history and plugins. On every start,
+`claude-as` merges the versioned `settings.json` into the account's own
+(versioned keys win, account-only keys such as `autoMode` stay, permission lists
+are unioned) and installs any enabled plugin the account lacks. The personal
+`CLAUDE.md` in `~/.claude` is loaded by every account. A new account needs a
+`/login` on first use.
 
 **Token-saving tools**, each working at a different layer:
 

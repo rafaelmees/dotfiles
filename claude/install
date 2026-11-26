@@ -16,6 +16,7 @@
 #   claude/CLAUDE.md     -> ~/.claude/CLAUDE.md      personal instructions (all projects)
 #   claude/settings.json -> ~/.claude/settings.json  vim mode, permissions, status line
 #   claude/statusline.sh -> ~/.claude/statusline.sh  grayscale status line
+#   claude/claude-as     -> ~/.local/bin/claude-as   run Claude with a named account
 #
 # Optional components (the Claude CLI and the linked config are always set up):
 #   jq  rtk  caveman  ponytail
@@ -106,6 +107,7 @@ info "Linking Claude config..."
 link "claude/CLAUDE.md"     "$HOME/.claude/CLAUDE.md"
 link "claude/settings.json" "$HOME/.claude/settings.json"
 link "claude/statusline.sh" "$HOME/.claude/statusline.sh"
+link "claude/claude-as"     "$HOME/.local/bin/claude-as"
 
 # --- jq (used by the status line) ------------------------------------------
 if command -v jq >/dev/null 2>&1; then

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# Runs Claude Code with a named account: claude-as <account> [claude args...]
+# Each account lives in ~/.claude-<account> (its own login, memory, history).
+# Before starting, merges the versioned claude/settings.json into the account's
+# settings.json (shared keys win, account-only keys such as autoMode stay,
+# permission lists are unioned) and installs any enabled plugin it lacks.
+# The default account (~/.claude) is plain `claude`.
+#
+set -euo pipefail
+
+usage() { echo "usage: claude-as <account> [claude args...]" >&2; exit 64; }
+[ $# -ge 1 ] || usage
+account=$1
+shift
+case "$account" in "" | *[!a-z0-9-]*) echo "claude-as: account names use a-z, 0-9 and -" >&2; usage ;; esac
+
+command -v jq >/dev/null 2>&1 || { echo "claude-as: jq is required" >&2; exit 69; }
+
+script=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+shared="$(cd "$(dirname "$script")" && pwd)/settings.json"
+dir="$HOME/.claude-$account"
+settings="$dir/settings.json"
+
+mkdir -p "$dir"
+[ -s "$settings" ] || echo '{}' > "$settings"
+
+merged=$(jq -s '
+  .[0] as $local | .[1] as $shared
+  | reduce ("allow", "ask", "deny") as $list ($local * $shared;
+      if ($local.permissions[$list] // $shared.permissions[$list]) == null then .
+      else .permissions[$list] = (($local.permissions[$list] // []) + ($shared.permissions[$list] // []) | unique)
+      end)
+' "$settings" "$shared")
+printf '%s\n' "$merged" > "$settings"
+
+export CLAUDE_CONFIG_DIR="$dir"
+
+installed="$dir/plugins/installed_plugins.json"
+for plugin in $(jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' "$shared"); do
+  jq -e --arg p "$plugin" '.plugins[$p]' "$installed" >/dev/null 2>&1 && continue
+  repo=$(jq -r --arg m "${plugin#*@}" '.extraKnownMarketplaces[$m].source.repo // empty' "$shared")
+  [ -n "$repo" ] && { claude plugin marketplace add "$repo" >/dev/null 2>&1 || true; }
+  claude plugin install "$plugin" || echo "claude-as: could not install $plugin" >&2
+done
+
+exec claude "$@"
