@@ -59,3 +59,9 @@ fleet() {
 if command -v tmux >/dev/null && [ -z "$TMUX" ]; then
   tmux attach-session -t main || tmux new-session -s main
 fi
+
+export REDISMS_SYSTEM_BINARY=/opt/homebrew/opt/redis/bin/redis-server
+
+alias claude-pessoal='CLAUDE_CONFIG_DIR="$HOME/.claude-pessoal" claude'
+alias claude-empresa='CLAUDE_CONFIG_DIR="$HOME/.claude-empresa" claude'
+
